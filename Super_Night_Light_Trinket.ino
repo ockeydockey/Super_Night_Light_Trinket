@@ -2,8 +2,9 @@
  *         "Super Night Light"            *
  *    Code and Hardware designed by:      *
  *            David Ockey                 *
+ ******************************************
+ * Copyright: David Ockey                 *
  ******************************************/
-
 int R = 255;
 int G = 255;
 int B = 255;
