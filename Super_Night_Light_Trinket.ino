@@ -18,7 +18,7 @@ boolean LEDStatus = false;
 boolean finish = false;
 
 void setup() {
-  pinMode(buttonPin, INPUT);
+  pinMode(buttonPin, INPUT_PULLUP);
   pinMode(CdS, INPUT);
   pinMode(3, OUTPUT);
   pinMode(KNOB, INPUT);
