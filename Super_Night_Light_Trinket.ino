@@ -5,6 +5,8 @@
  ******************************************
  * Copyright: David Ockey                 *
  ******************************************/
+#include <EEPROM.h>
+
 #define CdS 2
 #define BUTTON 1
 #define KNOB 4
@@ -45,9 +47,12 @@ void setup() {
   LEDBrightness = 0;
   startTime = 0;
   endTime = 0;
-  
-  // EEPROM retreival code here
-  operationMode = 0;
+
+  // Retreive previous setting, and set to default if no value was set
+  EEPROM.get(0x0, operationMode);
+  if (operationMode == 255) {
+    operationMode = 0;
+  }
 }
 
 void manualControl() {
@@ -60,7 +65,23 @@ void manualControl() {
   while (digitalRead(BUTTON) == LOW && ((long)(millis() - endTime) < 0));
   if (((long)(millis() - endTime) >= 0)) {
     operationMode = (operationMode + 1) % 2;
-    // EEPROM storage code here
+    EEPROM.update(0x0, operationMode);
+    digitalWrite(LED, LOW);
+    delay(250);
+    digitalWrite(LED, HIGH);
+    delay(250);
+    digitalWrite(LED, LOW);
+    delay(250);
+    digitalWrite(LED, HIGH);
+    delay(250);
+    digitalWrite(LED, LOW);
+    delay(250);
+    digitalWrite(LED, HIGH);
+    delay(250);
+    digitalWrite(LED, LOW);
+    // Wait for the user to release the button and then account for debounce before moving on.
+    while (digitalRead(BUTTON) == LOW);
+    delay(100);
   } else {
     while (digitalRead(BUTTON) == HIGH);
     for (byte i = 255; i >= 0; i--) {
@@ -75,7 +96,7 @@ void loop() {
     manualControl();
   }
 
-  lightSensed = (analogRead(CdS) >= threshold);
+  lightSensed = (analogRead(CdS) <= threshold);
 
   switch (LEDMode) {
     case OFF:
@@ -98,8 +119,18 @@ void loop() {
       }
       break;
     case ON:
-      // See if you can reset the MCU timer so that the 10 day rollover bug never happens
-      endTime = startTime + (map(analogRead(KNOB), 0 , 1024 , 10, 60) * 1000);
+      // Checks to see what operating mode the device is in.
+      // SHORT -> 10 Seconds to 1 Minute
+      // LONG  -> 1 Minute to 1 hour
+      if (operationMode == SHORT) {
+        endTime = startTime + (map(analogRead(KNOB), 0 , 1024 , 10, 60) * 1000);
+      } else if (operationMode == LONG) {
+        endTime = startTime + (map(analogRead(KNOB), 0 , 1024 , 60, 360) * 1000);
+      } else {
+        endTime = startTime + 1;
+      }
+      
+      // This type-casting math accounts for the 49-day rollover      
       if ((long)(millis() - endTime) >= 0) {
         LEDMode = FADINGOFF;
       }
