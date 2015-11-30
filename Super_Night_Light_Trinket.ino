@@ -4,9 +4,11 @@
  *            David Ockey                 *
  ******************************************
  * Copyright: David Ockey                 *
+ *            All rights reserved         *
  ******************************************/
 #include <EEPROM.h>
 
+// Pin asignments for external parts
 #define CdS 2
 #define BUTTON 3
 #define LED 1
@@ -17,13 +19,17 @@
 #define ON 2
 #define FADINGOFF 3
 
-// Operation Modes
-#define SHORT 0
-#define LONG 1
 // Operation Mode Times (in miliseconds)
-#define SHORT_TIME 15000
-#define LONG_TIME 60000
+// Maximum amount of time is 49-ish days.
+unsigned long times[] = {
+  15000,   // 15 Seconds
+  60000,   // 60 Seconds
+  300000   // 5 Minutes
+};
+// This should match the number of entries in the above table
+short numberOfModes = 3;
 
+// How dark it needs to be before triggering the LED
 unsigned int threshold = 150;
 
 bool lightSensed;
@@ -34,6 +40,41 @@ byte LEDBrightness;
 byte operationMode;
 unsigned long startTime;
 unsigned long endTime;
+
+void manualControl() {
+  startTime = millis();
+  for (byte i = 0; i < 255; i++) {
+    analogWrite(LED, i);
+    delay(2);
+  }
+  digitalWrite(LED, HIGH);
+  endTime = startTime + 3000;
+  while (digitalRead(BUTTON) == LOW && ((long)(millis() - endTime) < 0));
+  if (((long)(millis() - endTime) >= 0)) {
+    operationMode = (operationMode + 1) % numberOfModes;
+    EEPROM.write(0x0, operationMode);
+
+    digitalWrite(LED, LOW);
+    delay(300);
+    for (short i; i <= operationMode; i++) {
+      digitalWrite(LED, HIGH);
+      delay(100);
+      digitalWrite(LED, LOW);
+      delay(200);
+    }
+
+    // Wait for the user to release the button and then account for debounce before moving on.
+    while (digitalRead(BUTTON) == LOW);
+    delay(100);
+  } else {
+    while (digitalRead(BUTTON) == HIGH);
+    for (short i = 255; i > 0; i--) {
+      analogWrite(LED, i);
+      delay(2);
+    }
+    digitalWrite(LED, LOW);
+  }
+}
 
 void setup() {
   pinMode(BUTTON, INPUT_PULLUP);
@@ -56,53 +97,14 @@ void setup() {
   }
 }
 
-void manualControl() {
-  startTime = millis();
-  for (byte i = 0; i < 255; i++) {
-    analogWrite(LED, i);
-    delay(2);
-  }
-  digitalWrite(LED, HIGH);
-  endTime = startTime + 3000;
-  while (digitalRead(BUTTON) == LOW && ((long)(millis() - endTime) < 0));
-  if (((long)(millis() - endTime) >= 0)) {
-    operationMode = (operationMode + 1) % 2;
-    EEPROM.write(0x0, operationMode);
-    digitalWrite(LED, LOW);
-    delay(300);
-    digitalWrite(LED, HIGH);
-    delay(100);
-    digitalWrite(LED, LOW);
-    delay(100);
-    digitalWrite(LED, HIGH);
-    delay(100);
-    digitalWrite(LED, LOW);
-    if (operationMode == LONG) {
-      delay(100);
-      digitalWrite(LED, HIGH);
-      delay(100);
-      digitalWrite(LED, LOW);
-    }
-    // Wait for the user to release the button and then account for debounce before moving on.
-    while (digitalRead(BUTTON) == LOW);
-    delay(100);
-  } else {
-    while (digitalRead(BUTTON) == HIGH);
-    for (short i = 255; i > 0; i--) {
-      analogWrite(LED, i);
-      delay(2);
-    }
-    digitalWrite(LED, LOW);
-  }
-}
-
 void loop() {
+  // If the button is pressed, then goto Manual Control mode
   if (digitalRead(BUTTON) == LOW) {
     manualControl();
   }
 
+  // Determines if there is enough light or not
   lightSensed = (analogRead(CdS) <= threshold);
-//  lightSensed = false;
 
   switch (LEDMode) {
     case OFF:
@@ -123,14 +125,8 @@ void loop() {
           LEDMode = ON;
           startTime = millis();
 
-          // Checks to see what operating mode the device is in.
-          if (operationMode == SHORT) {
-            endTime = startTime + SHORT_TIME;
-          } else if (operationMode == LONG) {
-            endTime = startTime + LONG_TIME;
-          } else {
-            endTime = startTime + 1;
-          }
+          // Checks to see what operating mode the device is in and set the timeout accordingly
+          endTime = startTime + times[operationMode];
         }
         analogWrite(LED, LEDBrightness);
         delay(2);
