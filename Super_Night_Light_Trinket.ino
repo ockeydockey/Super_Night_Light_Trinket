@@ -18,6 +18,7 @@
 #define FADINGON 1
 #define ON 2
 #define FADINGOFF 3
+#define FASTFADINGOFF 4
 
 // Operation Mode Times (in miliseconds)
 // Maximum amount of time is 49-ish days.
@@ -29,10 +30,13 @@ unsigned long times[] = {
 // This should match the number of entries in the above table
 short numberOfModes = 3;
 
-// How dark it needs to be before triggering the LED
-unsigned int threshold = 150;
+// How dark it needs to be before triggering the LED (Range: 0 - 1023)
+// The higher the number, the darker it needs to be for the LED to turn on.
+unsigned int darkThreshold = 750;
+unsigned int lightThreshold = 600;
 
 bool lightSensed;
+bool darkSensed;
 bool triggered;
 
 byte LEDMode;
@@ -60,7 +64,7 @@ void manualControl() {
       digitalWrite(LED, HIGH);
       delay(100);
       digitalWrite(LED, LOW);
-      delay(200);
+      delay(150);
     }
 
     // Wait for the user to release the button and then account for debounce before moving on.
@@ -104,11 +108,12 @@ void loop() {
   }
 
   // Determines if there is enough light or not
-  lightSensed = (analogRead(CdS) <= threshold);
+  lightSensed = (analogRead(CdS) <= lightThreshold);
+  darkSensed  = (analogRead(CdS) >= darkThreshold);
 
   switch (LEDMode) {
     case OFF:
-      if (!lightSensed && !triggered) {
+      if (darkSensed && !triggered) {
         LEDMode = FADINGON;
         triggered = true;
       } else if (lightSensed && triggered) {
@@ -117,7 +122,7 @@ void loop() {
       break;
     case FADINGON:
       if (lightSensed) {
-        LEDMode = FADINGOFF;
+        LEDMode = FASTFADINGOFF;
         LEDBrightness = 0;
       } else {
         LEDBrightness++;
@@ -134,20 +139,30 @@ void loop() {
       break;
     case ON:
       // This type-casting math accounts for the 49-day rollover
-      if (lightSensed || (long)(millis() - endTime) >= 0) {
+      if (lightSensed) {
+        LEDMode = FASTFADINGOFF;
+      } else if ((long)(millis() - endTime) >= 0) {
         LEDMode = FADINGOFF;
       }
       break;
     case FADINGOFF:
       if (lightSensed) {
-        LEDMode = OFF;
-        LEDBrightness = 0;
+        LEDMode = FASTFADINGOFF;
       } else {
         LEDBrightness--;
         if (LEDBrightness == 0) {
           LEDMode = OFF;
         }
         delay(4);
+      }
+      analogWrite(LED, LEDBrightness);
+      break;
+    case FASTFADINGOFF:
+      if (LEDBrightness == 0) {
+        LEDMode = OFF;
+      } else {
+        LEDBrightness--;
+        delay(1);
       }
       analogWrite(LED, LEDBrightness);
       break;
